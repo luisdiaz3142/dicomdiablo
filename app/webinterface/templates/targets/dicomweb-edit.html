@@ -29,38 +29,38 @@
     <p class="help">Select the authentication method for your DICOMweb endpoint</p>
 </div>
 
-<!-- HTTP Basic Auth Section -->
-<div id="basic_auth_section" style="display: none;">
+<!-- HTTP Basic Auth Section (initially hidden) -->
+<div id="basic_auth_section" style="display: none; margin-top: 20px;">
     <div class="field">
         <label class="label">Username</label>
         <div class="control">
-            <input name="http_user" class="input" autocomplete='off' placeholder="HTTPS username"
+            <input name="http_user" id="http_user" class="input" autocomplete='off' placeholder="HTTPS username"
                value="{{targets[edittarget].http_user if targets[edittarget].http_user else ''}}">
         </div>
     </div>
     <div class="field">
         <label class="label">Password</label>
         <div class="control">
-            <input name="http_password" type="password" class="input" autocomplete='off' placeholder="HTTPS password"
+            <input name="http_password" id="http_password" type="password" class="input" autocomplete='off' placeholder="HTTPS password"
                value="{{targets[edittarget].http_password if targets[edittarget].http_password else ''}}">
         </div>
     </div>
 </div>
 
-<!-- Bearer Token Section -->
-<div id="token_auth_section" style="display: none;">
+<!-- Bearer Token Section (initially hidden) -->
+<div id="token_auth_section" style="display: none; margin-top: 20px;">
     <div class="field">
         <label class="label">Access Token</label>
         <div class="control">
-            <input name="access_token" class="input" autocomplete='off' placeholder="Bearer token"
+            <input name="access_token" id="access_token" class="input" autocomplete='off' placeholder="Bearer token"
                value="{{targets[edittarget].access_token if targets[edittarget].access_token else ''}}">
         </div>
         <p class="help">Provide your OAuth 2.0 access token or API key</p>
     </div>
 </div>
 
-<!-- GCP Service Account Section -->
-<div id="gcp_auth_section" style="display: none;">
+<!-- GCP Service Account Section (initially hidden) -->
+<div id="gcp_auth_section" style="display: none; margin-top: 20px;">
     <div class="notification is-warning">
         <strong>GCP Service Account Authentication</strong><br>
         Upload your Google Cloud service account JSON key file. The file will be securely stored in <code>/opt/mercure/config/gcp-keys/</code>.
@@ -100,7 +100,7 @@
     <div class="field">
         <label class="label">OAuth Scopes (Optional)</label>
         <div class="control">
-            <input name="gcp_auth_scopes" class="input" autocomplete='off' 
+            <input name="gcp_auth_scopes" id="gcp_auth_scopes" class="input" autocomplete='off' 
                    placeholder="https://www.googleapis.com/auth/cloud-healthcare"
                    value="{% if targets[edittarget].gcp_auth_scopes %}{{ ','.join(targets[edittarget].gcp_auth_scopes) }}{% endif %}">
         </div>
@@ -137,99 +137,134 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // Authentication method toggle logic
-document.addEventListener('DOMContentLoaded', function() {
-    const authSelect = document.getElementById('auth_method_select');
-    const basicSection = document.getElementById('basic_auth_section');
-    const tokenSection = document.getElementById('token_auth_section');
-    const gcpSection = document.getElementById('gcp_auth_section');
+$(document).ready(function() {
+    const authSelect = $('#auth_method_select');
+    const basicSection = $('#basic_auth_section');
+    const tokenSection = $('#token_auth_section');
+    const gcpSection = $('#gcp_auth_section');
     
     function updateAuthSections() {
-        const selectedMethod = authSelect.value;
+        const selectedMethod = authSelect.val();
         
-        // Hide all sections
-        basicSection.style.display = 'none';
-        tokenSection.style.display = 'none';
-        gcpSection.style.display = 'none';
+        console.log('Auth method selected:', selectedMethod); // Debug log
         
-        // Show selected section
+        // Hide ALL sections first
+        basicSection.hide();
+        tokenSection.hide();
+        gcpSection.hide();
+        
+        // Clear fields in hidden sections (optional - helps with form submission)
+        basicSection.find('input').val('');
+        tokenSection.find('input').val('');
+        // Don't clear GCP fields as we want to preserve the path if switching away temporarily
+        
+        // Show only the selected section
         if (selectedMethod === 'basic') {
-            basicSection.style.display = 'block';
+            basicSection.show();
+            console.log('Showing HTTP Basic Auth section');
         } else if (selectedMethod === 'token') {
-            tokenSection.style.display = 'block';
+            tokenSection.show();
+            console.log('Showing Bearer Token section');
         } else if (selectedMethod === 'gcp_service_account') {
-            gcpSection.style.display = 'block';
+            gcpSection.show();
+            console.log('Showing GCP Service Account section');
+        } else if (selectedMethod === 'none') {
+            // Nothing to show - all sections remain hidden
+            console.log('No authentication selected');
         }
     }
     
-    // Initialize on page load
+    // Initialize on page load - show correct section based on current value
     updateAuthSections();
     
     // Update on selection change
-    authSelect.addEventListener('change', updateAuthSections);
+    authSelect.on('change', function() {
+        updateAuthSections();
+    });
     
-    // File upload display
-    const fileInput = document.getElementById('gcp_json_file');
-    const fileName = document.getElementById('gcp_file_name');
+    // File upload display - update filename when file selected
+    const fileInput = $('#gcp_json_file');
+    const fileName = $('#gcp_file_name');
     
-    if (fileInput) {
-        fileInput.addEventListener('change', function() {
-            if (this.files && this.files[0]) {
-                fileName.textContent = this.files[0].name;
-            }
-        });
-    }
+    fileInput.on('change', function() {
+        if (this.files && this.files[0]) {
+            fileName.text(this.files[0].name);
+            console.log('File selected:', this.files[0].name);
+        } else {
+            fileName.text('No file selected');
+        }
+    });
 });
 
 // Handle file upload before form submission
-document.querySelector('form').addEventListener('submit', async function(e) {
-    const authMethod = document.getElementById('auth_method_select').value;
-    const fileInput = document.getElementById('gcp_json_file');
-    const uploadStatus = document.getElementById('upload_status');
-    const uploadStatusField = document.getElementById('upload_status_field');
-    const pathInput = document.getElementById('gcp_service_account_json_path');
-    
-    // Only handle GCP service account uploads
-    if (authMethod === 'gcp_service_account' && fileInput && fileInput.files.length > 0) {
-        e.preventDefault();
+$(document).ready(function() {
+    $('form').on('submit', async function(e) {
+        const authMethod = $('#auth_method_select').val();
+        const fileInput = document.getElementById('gcp_json_file');
+        const uploadStatus = $('#upload_status');
+        const uploadStatusField = $('#upload_status_field');
+        const pathInput = $('#gcp_service_account_json_path');
         
-        // Show upload in progress
-        uploadStatusField.style.display = 'block';
-        uploadStatus.className = 'notification is-info';
-        uploadStatus.textContent = 'Uploading service account key...';
+        console.log('Form submitting with auth method:', authMethod);
         
-        const formData = new FormData();
-        formData.append('gcp_json_file', fileInput.files[0]);
-        formData.append('target_name', '{{edittarget}}');
-        
-        try {
-            const response = await fetch('/targets/upload_gcp_key', {
-                method: 'POST',
-                body: formData
-            });
+        // Only handle GCP service account uploads if a NEW file was selected
+        if (authMethod === 'gcp_service_account' && fileInput && fileInput.files.length > 0) {
+            e.preventDefault();
+            console.log('Uploading GCP service account key...');
             
-            const result = await response.json();
+            // Show upload in progress
+            uploadStatusField.show();
+            uploadStatus.removeClass().addClass('notification is-info');
+            uploadStatus.text('Uploading service account key...');
             
-            if (response.ok && result.success) {
-                uploadStatus.className = 'notification is-success';
-                uploadStatus.textContent = 'File uploaded successfully!';
+            const formData = new FormData();
+            formData.append('gcp_json_file', fileInput.files[0]);
+            formData.append('target_name', '{{edittarget}}');
+            
+            try {
+                const response = await fetch('/targets/upload_gcp_key', {
+                    method: 'POST',
+                    body: formData
+                });
                 
-                // Set the path in hidden field
-                pathInput.value = result.file_path;
+                const result = await response.json();
+                console.log('Upload response:', result);
                 
-                // Submit the form after successful upload
-                setTimeout(() => {
-                    e.target.submit();
-                }, 1000);
-            } else {
-                uploadStatus.className = 'notification is-danger';
-                uploadStatus.textContent = 'Error: ' + (result.error || 'Upload failed');
+                if (response.ok && result.success) {
+                    uploadStatus.removeClass().addClass('notification is-success');
+                    uploadStatus.text('File uploaded successfully!');
+                    
+                    // Set the path in hidden field
+                    pathInput.val(result.file_path);
+                    console.log('File path set to:', result.file_path);
+                    
+                    // Submit the form after successful upload
+                    setTimeout(() => {
+                        console.log('Submitting form...');
+                        e.target.submit();
+                    }, 1000);
+                } else {
+                    uploadStatus.removeClass().addClass('notification is-danger');
+                    uploadStatus.text('Error: ' + (result.error || 'Upload failed'));
+                    console.error('Upload failed:', result);
+                }
+            } catch (error) {
+                uploadStatus.removeClass().addClass('notification is-danger');
+                uploadStatus.text('Error uploading file: ' + error.message);
+                console.error('Upload error:', error);
             }
-        } catch (error) {
-            uploadStatus.className = 'notification is-danger';
-            uploadStatus.textContent = 'Error uploading file: ' + error.message;
+        } else if (authMethod === 'gcp_service_account' && (!fileInput || fileInput.files.length === 0)) {
+            // GCP auth selected but no new file - check if path already exists
+            if (!pathInput.val()) {
+                e.preventDefault();
+                alert('Please select a service account JSON file to upload.');
+                return false;
+            }
+            // If path exists, allow normal form submission
+            console.log('Using existing GCP key at:', pathInput.val());
         }
-    }
+    });
 });
 </script>
