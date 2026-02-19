@@ -1,14 +1,11 @@
 
-![mercure](docs/images/mercure.png)
+# Diablo DICOM Router
 
-![Python application](https://github.com/mercure-imaging/mercure/workflows/Python%20application/badge.svg)&nbsp; ![GitHub](https://img.shields.io/github/license/mercure-imaging/mercure?color=%233273dc)&nbsp; [![project chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://mercure-imaging.zulipchat.com)
+![Python application](https://github.com/mercure-imaging/mercure/workflows/Python%20application/badge.svg)&nbsp; ![GitHub](https://img.shields.io/github/license/mercure-imaging/mercure?color=%23e63946)
 
-# mercure DICOM Orchestrator
+A flexible DICOM routing and processing solution with user-friendly web interface and extensive monitoring functions. Custom processing modules can be implemented as Docker containers. Diablo DICOM Router has been written in the Python language and uses the DCMTK toolkit for the underlying DICOM communication. It can be deployed either as containerized single-server installation using Docker Compose, or as scalable cluster installation using Nomad. Diablo consists of multiple service modules that handle different steps of the processing pipeline.
 
-A flexible DICOM routing and processing solution with user-friendly web interface and extensive monitoring functions. Custom processing modules can be implemented as Docker containers. mercure has been written in the Python language and uses the DCMTK toolkit for the underlying DICOM communication. It can be deployed either as containerized single-server installation using Docker Compose, or as scalable cluster installation using Nomad. mercure consists of multiple service modules that handle different steps of the processing pipeline.
-
-Installation instructions and usage information can be found in the project documentation:  
-https://mercure-imaging.org/docs/index.html
+Based on [mercure DICOM Orchestrator](https://mercure-imaging.org).
 
 
 ## Receiver
@@ -50,4 +47,4 @@ The webgui module provides a user-friendly web interface for configuring, contro
 monitoring the server.
 
 ## Bookkeeper
-The bookkeeper module acts as central monitoring instance for all mercure services. The individual modules communicate with the bookkeeper via a TCP/IP connection. The submitted information is stored in a Postgres database.
+The bookkeeper module acts as central monitoring instance for all Diablo services. The individual modules communicate with the bookkeeper via a TCP/IP connection. The submitted information is stored in a Postgres database.
