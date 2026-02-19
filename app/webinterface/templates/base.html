@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
   <meta name="description" content="">
   <meta name="author" content="">
-  <title>mercure{% if self.title() %} &nbsp;&mid;&nbsp; {% endif %}{% block title %}{% endblock %}{% if appliance_name != 'master' %} &nbsp;&minus;&nbsp; {{ appliance_name }}{% endif %}</title>
+  <title>Diablo DICOM Router{% if self.title() %} &nbsp;&mid;&nbsp; {% endif %}{% block title %}{% endblock %}{% if appliance_name != 'master' %} &nbsp;&minus;&nbsp; {{ appliance_name }}{% endif %}</title>
   <link rel="stylesheet" href="{{ url_for('static', path='/css/bulma.min.css') }}">
   <script nonce="{{ csp_nonce }}" defer src="{{ url_for('static', path='/js/fontawesome-5.9.js') }}"></script>
   <script nonce="{{ csp_nonce }}" src="{{ url_for('static', path='/js/jquery-3.5.1.min.js') }}"></script>
@@ -25,7 +25,7 @@
     <div class="container">
       <div class="navbar-brand" style="margin-right: 20px">
         <a class="navbar-item is-size-5 brand" href="/">
-          <img src="{{ url_for('static', path='header_logo.png') }}" width="132" height="24"></img>
+          <img src="{{ url_for('static', path='diablo_logo.svg') }}" width="220" height="28" alt="Diablo DICOM Router">
         </a>
         <a role="button" class="navbar-burger burger" aria-label="menu" aria-expanded="false"
           data-target="navbarMainMenu">
@@ -70,12 +70,12 @@
           <div class="navbar-item has-dropdown is-hoverable">
             <a class="navbar-link">User: {{ user }}</a>
             <div class="navbar-dropdown">
-              <a class="navbar-item" href="https://mercure-imaging.org/docs/index.html" target="_blank">
+              <a class="navbar-item" href="https://github.com/mercure-imaging/mercure/wiki" target="_blank">
                 Help
               </a>
-              <a class="navbar-item get-support" href="https://mercure-imaging.zulipchat.com/#narrow/stream/423754-support" target="_blank">
+              <a class="navbar-item get-support" href="https://github.com/mercure-imaging/mercure/discussions" target="_blank">
                 Get Support
-              </a>         
+              </a>
               <a class="navbar-item" href="https://github.com/mercure-imaging/mercure/issues" target="_blank">
                 Report Bug
               </a>
@@ -121,8 +121,8 @@
   </section>
   <footer class="footer">
     <div class="content has-text-centered">
-      <p>mercure Orchestrator&nbsp;&minus;&nbsp;Version {{mercure_version}}<br />
-        <a href="https://mercure-imaging.org" target="_blank">https://mercure-imaging.org</a>
+      <p>Diablo DICOM Router&nbsp;&minus;&nbsp;Version {{mercure_version}}<br />
+        <a href="https://github.com/mercure-imaging/mercure" target="_blank">Diablo DICOM Router</a>
       </p>
     </div>
   </footer>

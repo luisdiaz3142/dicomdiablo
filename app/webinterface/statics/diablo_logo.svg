@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 32" height="32" width="280">
+  <defs>
+    <linearGradient id="diabloGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e63946;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f4845f;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <text x="0" y="23" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="700" fill="url(#diabloGrad)" letter-spacing="1">DIABLO</text>
+  <text x="98" y="23" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="300" fill="#e0e0e0" letter-spacing="0.5">DICOM Router</text>
+</svg>
