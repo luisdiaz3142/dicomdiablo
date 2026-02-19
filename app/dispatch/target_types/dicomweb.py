@@ -181,10 +181,15 @@ class DicomWebTargetHandler(TargetHandler[DicomWebTarget]):
     ) -> str:
         client = self.create_client(target)
         datasets = [pydicom.dcmread(str(k)) for k in source_folder.glob("**/*.dcm")]
-        response = client.store_instances(datasets)
-        if len(response.ReferencedSOPSequence) != len(datasets):
-            raise Exception("Did not store all datasets", response)
-
+        try:
+            response = client.store_instances(datasets)
+            if len(response.ReferencedSOPSequence) != len(datasets):
+                raise Exception("Did not store all datasets", response)
+        except HTTPError as e:
+            if e.response.status_code == 409:
+                logger.warning("Series already exists in the target.  Ignore Exception Error for GCP")
+            else:
+                raise
         return ""
 
     def from_form(self, form: dict, factory, current_target) -> DicomWebTarget:

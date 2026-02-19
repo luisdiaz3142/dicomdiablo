@@ -69,9 +69,6 @@ def process_image(file, in_folder, out_folder, series_uid, settings):
         
         # Set Institutional Department Name (0008,1040) to "NVRA"
         ds.InstitutionalDepartmentName = settings["department_name"]
-
-        # Update Issuer of Patient ID tag (0010,0021) to "NVRA"
-        ds.IssuerOfPatientID = settings["issuer_of_patient_id"]
         
         # ===== PRIVATE TAG CREATION =====
         # Create private tag (7771,0010) with VR Type LO and value "NL_PRIVATE"
@@ -127,8 +124,6 @@ def main(args=sys.argv[1:]):
     settings = {
         "institution_name": "NVRA",       # Value for Institution Name tag (0008,0080)
         "department_name": "NVRA",        # Value for Institutional Department Name tag (0008,1040)
-        ### Add in Issuer of Patient ID tag (0010,0021)
-        "issuer_of_patient_id": "NVRA",   # Value for Issuer of Patient ID tag (0010,0021)
         "private_creator": "NL_PRIVATE",  # Value for private creator tag (7771,0010)
         "pipeline_value": "PIPELINE",     # Value for pipeline tag (7771,1001)
         "main_value": "MAIN",             # Value for main tag (7771,1002)
