@@ -197,12 +197,12 @@ class DatabaseConfigBackend(ConfigBackend):
 
     def _listen_loop(self) -> None:
         import psycopg2
-        from psycopg2 import extras
+        from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
         conn = None
         while not self._listener_stop.is_set():
             try:
                 conn = psycopg2.connect(self.database_url)
-                conn.set_isolation_level(extras.ISOLATION_LEVEL_AUTOCOMMIT)
+                conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
                 with conn.cursor() as cur:
                     cur.execute("LISTEN " + MERCURE_CONFIG_NOTIFY_CHANNEL)
                 while not self._listener_stop.is_set():
