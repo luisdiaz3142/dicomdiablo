@@ -196,6 +196,7 @@ class DatabaseConfigBackend(ConfigBackend):
         logger.info("Config NOTIFY listener started (channel=%s)", MERCURE_CONFIG_NOTIFY_CHANNEL)
 
     def _listen_loop(self) -> None:
+        import select
         import psycopg2
         from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
         conn = None
@@ -206,9 +207,12 @@ class DatabaseConfigBackend(ConfigBackend):
                 with conn.cursor() as cur:
                     cur.execute("LISTEN " + MERCURE_CONFIG_NOTIFY_CHANNEL)
                 while not self._listener_stop.is_set():
+                    # Wait for connection to be readable (timeout to check stop flag)
+                    r, _, _ = select.select([conn], [], [], 5.0)
+                    if not r:
+                        continue
                     if conn.poll() != psycopg2.extensions.POLL_OK:
                         break
-                    conn.select()
                     while conn.notifies:
                         n = conn.notifies.pop(0)
                         logger.info("Config NOTIFY received: %s", n.channel)
