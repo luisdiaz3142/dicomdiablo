@@ -49,6 +49,20 @@
                         <td>{{runtime}}</td>
                     </tr>
                     <tr>
+                        <td>Configuration mode:</td>
+                        <td>
+                            {% if config_backend_mode == 'shared' %}
+                            <span class="tag is-info">Shared</span>
+                            {% if config_version_info %}
+                            &nbsp;Version {{ config_version_info.version }}
+                            {% if config_version_info.updated_at %} (updated {{ config_version_info.updated_at }}{% if config_version_info.updated_by %} by {{ config_version_info.updated_by }}{% endif %}){% endif %}
+                            {% endif %}
+                            {% else %}
+                            <span class="tag is-light">Standalone</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
                         <td>Support Root Modules:</td>
                         <td>{{config['support_root_modules']}}
                             {% if config['support_root_modules']==True %}

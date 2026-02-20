@@ -391,6 +391,9 @@ async def configuration(request) -> Response:
         config.read_config()
     except Exception:
         return PlainTextResponse("Error reading configuration file.")
+    backend = config.get_backend()
+    config_backend_mode = "shared" if hasattr(backend, "get_version_info") else "standalone"
+    config_version_info = backend.get_version_info() if hasattr(backend, "get_version_info") else None
     template = "configuration.html"
     config_edited = int(request.query_params.get("edited", 0))
     os_string = distro.name(True)
@@ -403,6 +406,8 @@ async def configuration(request) -> Response:
         "os_string": os_string,
         "config_edited": config_edited,
         "runtime": runtime,
+        "config_backend_mode": config_backend_mode,
+        "config_version_info": config_version_info,
     }
     return templates.TemplateResponse(template, context)
 
@@ -412,19 +417,14 @@ async def configuration(request) -> Response:
 async def configuration_edit(request) -> Response:
     """Shows a configuration editor"""
 
-    # Check for existence of lock file
-    cfg_file = Path(config.configuration_filename)
-    cfg_lock = Path(cfg_file.parent / cfg_file.stem).with_suffix(mercure_names.LOCK)
-    if cfg_lock.exists():
+    backend = config.get_backend()
+    if backend.is_locked():
         return PlainTextResponse("Configuration is being updated. Try again in a minute.")
 
     try:
-        with open(cfg_file, "r") as json_file:
-            config_content = json.load(json_file)
+        config_content = backend.load_raw()
     except Exception:
-        return PlainTextResponse("Error reading configuration file.")
-
-    config_content = json.dumps(config_content, indent=4, sort_keys=False)
+        return PlainTextResponse("Error reading configuration.")
 
     template = "configuration_edit.html"
     context = {

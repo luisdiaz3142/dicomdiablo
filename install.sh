@@ -111,27 +111,56 @@ create_folders () {
 }
 
 install_configuration () {
+  # Configuration mode: standalone (file) or shared (database) — prompt only for systemd
+  CONFIG_MODE="${CONFIG_MODE:-1}"
+  if [ "${INSTALL_TYPE:-}" = "systemd" ] && [ ! -f "$CONFIG_PATH"/mercure.env ]; then
+    echo ""
+    echo "Configuration mode:"
+    echo "  1) Standalone - Configuration stored locally (single server)"
+    echo "  2) Shared     - Configuration stored in PostgreSQL (multi-server)"
+    read -p "Select mode [1]: " CONFIG_MODE
+    CONFIG_MODE=${CONFIG_MODE:-1}
+  fi
+
   if [ ! -f "$CONFIG_PATH"/mercure.json ]; then
     echo "## Copying configuration files..."
-    sudo chown $USER "$CONFIG_PATH" 
+    sudo chown $USER "$CONFIG_PATH"
     cp "$MERCURE_SRC"/configuration/default_bookkeeper.env "$CONFIG_PATH"/bookkeeper.env
     cp "$MERCURE_SRC"/configuration/default_mercure.json "$CONFIG_PATH"/mercure.json
     cp "$MERCURE_SRC"/configuration/default_services.json "$CONFIG_PATH"/services.json
     cp "$MERCURE_SRC"/configuration/default_webgui.env "$CONFIG_PATH"/webgui.env
     echo "POSTGRES_PASSWORD=$DB_PWD" > "$CONFIG_PATH"/db.env
 
-    if [ $INSTALL_TYPE = "systemd" ]; then 
+    if [ $INSTALL_TYPE = "systemd" ]; then
       sed -i -e "s/mercure:ChangePasswordHere@localhost/mercure:$DB_PWD@localhost/" "$CONFIG_PATH"/bookkeeper.env
     elif [ $INSTALL_TYPE = "docker" ]; then
       sed -i -e "s/mercure:ChangePasswordHere@localhost/mercure:$DB_PWD@db/" "$CONFIG_PATH"/bookkeeper.env
       sed -i -e "s/0.0.0.0:8080/bookkeeper:8080/" "$CONFIG_PATH"/mercure.json
     fi
-    
+
     sed -i -e "s/BOOKKEEPER_TOKEN_PLACEHOLDER/$BOOKKEEPER_SECRET/" "$CONFIG_PATH"/mercure.json
     sed -i -e "s/PutSomethingRandomHere/$SECRET/" "$CONFIG_PATH"/webgui.env
     sudo chown -R $OWNER:$OWNER "$CONFIG_PATH"
     sudo chmod -R o-r "$CONFIG_PATH"
     sudo chmod a+xr "$CONFIG_PATH"
+  fi
+
+  # Create mercure.env for config backend (systemd: standalone vs shared)
+  if [ "${INSTALL_TYPE:-}" = "systemd" ] && [ ! -f "$CONFIG_PATH"/mercure.env ]; then
+    if [ "$CONFIG_MODE" = "2" ]; then
+      SHARED_DB_URL="${SHARED_DB_URL:-postgresql://mercure:$DB_PWD@localhost/mercure}"
+      echo "Using shared configuration (PostgreSQL). DATABASE_URL=$SHARED_DB_URL"
+      {
+        echo "MERCURE_CONFIG_BACKEND=database"
+        echo "DATABASE_URL=$SHARED_DB_URL"
+        echo "MERCURE_CONFIG_CACHE=$CONFIG_PATH/mercure.json.cache"
+        echo "MERCURE_CONFIG_FILE=$CONFIG_PATH/mercure.json.cache"
+      } > "$CONFIG_PATH"/mercure.env
+    else
+      echo "MERCURE_CONFIG_BACKEND=file" > "$CONFIG_PATH"/mercure.env
+    fi
+    sudo chown $OWNER:$OWNER "$CONFIG_PATH"/mercure.env
+    sudo chmod o-r "$CONFIG_PATH"/mercure.env
   fi
 }
 
@@ -431,12 +460,20 @@ EOM
 install_services() {
   echo "## Installing services..."
   sudo cp -n "$MERCURE_SRC"/installation/*.service /etc/systemd/system
+  sudo chmod +x "$MERCURE_BASE/app/tools/sync_config_cache.sh" 2>/dev/null || true
   sudo systemctl daemon-reload
   sudo systemctl enable mercure_bookkeeper.service mercure_cleaner.service mercure_dispatcher.service mercure_receiver.service mercure_router.service mercure_ui.service mercure_processor.service
   sudo systemctl restart mercure_bookkeeper.service mercure_cleaner.service mercure_dispatcher.service mercure_receiver.service mercure_router.service mercure_ui.service mercure_processor.service
 
   sudo systemctl enable mercure_worker_fast@1.service mercure_worker_fast@2.service mercure_worker_slow@1.service mercure_worker_slow@2.service
   sudo systemctl restart mercure_worker_fast@1.service mercure_worker_fast@2.service mercure_worker_slow@1.service mercure_worker_slow@2.service
+}
+
+seed_shared_config() {
+  if [ "${CONFIG_MODE:-1}" = "2" ] && [ -f "$CONFIG_PATH"/mercure.env ]; then
+    echo "## Seeding shared configuration into database..."
+    sudo -u mercure bash -c "set -a && source $CONFIG_PATH/mercure.env && set +a && cd $MERCURE_BASE/app && python3 -m tools.seed_config" || true
+  fi
 }
 
 systemd_install () {
@@ -451,6 +488,7 @@ systemd_install () {
   install_dependencies
   install_postgres
   sudo chown -R mercure:mercure "$MERCURE_BASE"
+  seed_shared_config
   install_services
 }
 

@@ -6,6 +6,7 @@ Requires=network.target
 Wants=mercure_bookkeeper.service
 
 [Service]
+EnvironmentFile=-/opt/mercure/config/mercure.env
 Type=simple
 WorkingDirectory=/opt/mercure/app
 ExecStart=/opt/mercure/env/bin/python /opt/mercure/app/processor.py

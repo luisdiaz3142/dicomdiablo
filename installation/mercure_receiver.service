@@ -6,8 +6,10 @@ Requires=network.target
 Wants=mercure_bookkeeper.service
 
 [Service]
+EnvironmentFile=-/opt/mercure/config/mercure.env
 Type=simple
 WorkingDirectory=/opt/mercure/app
+ExecStartPre=/opt/mercure/app/tools/sync_config_cache.sh
 ExecStart=/opt/mercure/app/receiver.sh
 Restart=on-failure
 RestartSec=3
