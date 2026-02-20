@@ -133,6 +133,14 @@ install_configuration () {
     sudo chmod -R o-r "$CONFIG_PATH"
     sudo chmod a+xr "$CONFIG_PATH"
   fi
+  # Shared config database: write env so systemd services can use MERCURE_CONFIG_DATABASE_URL
+  if [ "${USE_SHARED_CONFIG:-no}" = "shared" ] || [ "${USE_SHARED_CONFIG:-no}" = "yes" ]; then
+    if [ -n "${CONFIG_DATABASE_URL:-}" ]; then
+      echo "MERCURE_CONFIG_DATABASE_URL=$CONFIG_DATABASE_URL" | sudo tee "$CONFIG_PATH"/config_db.env > /dev/null
+      sudo chown $OWNER:$OWNER "$CONFIG_PATH"/config_db.env
+      sudo chmod 600 "$CONFIG_PATH"/config_db.env
+    fi
+  fi
 }
 
 install_nomad () {
@@ -439,8 +447,67 @@ install_services() {
   sudo systemctl restart mercure_worker_fast@1.service mercure_worker_fast@2.service mercure_worker_slow@1.service mercure_worker_slow@2.service
 }
 
+prompt_shared_config () {
+  # Only prompt when systemd is selected; use defaults when unset (e.g. non-interactive)
+  USE_SHARED_CONFIG="${USE_SHARED_CONFIG:-}"
+  CONFIG_DATABASE_URL="${CONFIG_DATABASE_URL:-}"
+  if [ -n "$USE_SHARED_CONFIG" ]; then
+    if [ "$USE_SHARED_CONFIG" = "shared" ] && [ -z "${CONFIG_DATABASE_URL:-}" ]; then
+      echo "USE_SHARED_CONFIG=shared but CONFIG_DATABASE_URL is not set." 1>&2
+      exit 1
+    fi
+    export USE_SHARED_CONFIG CONFIG_DATABASE_URL
+    return
+  fi
+  echo ""
+  echo "Configuration mode:"
+  echo "  standalone - Single server: config stored in $CONFIG_PATH/mercure.json"
+  echo "  shared     - Multiple servers: config stored in a PostgreSQL database (synced across all servers)"
+  while [ -z "$USE_SHARED_CONFIG" ]; do
+    read -p "Use standalone or shared config? (standalone/shared) [standalone]: " USE_SHARED_CONFIG
+    USE_SHARED_CONFIG="${USE_SHARED_CONFIG:-standalone}"
+    if [ "$USE_SHARED_CONFIG" != "standalone" ] && [ "$USE_SHARED_CONFIG" != "shared" ]; then
+      echo "Please enter 'standalone' or 'shared'."
+      USE_SHARED_CONFIG=""
+    fi
+  done
+  if [ "$USE_SHARED_CONFIG" = "shared" ]; then
+    echo ""
+    echo "Shared config database location:"
+    echo "  1) Local Postgres - Add a table to the same database install.sh is already installing (recommended for first server)"
+    echo "  2) Another instance - Connect to an existing Postgres server (e.g. another mercure server's DB)"
+    CONFIG_DB_CHOICE=""
+    while [ -z "$CONFIG_DB_CHOICE" ]; do
+      read -p "Enter 1 or 2 [1]: " CONFIG_DB_CHOICE
+      CONFIG_DB_CHOICE="${CONFIG_DB_CHOICE:-1}"
+      if [ "$CONFIG_DB_CHOICE" = "1" ]; then
+        CONFIG_DATABASE_URL="postgresql://mercure:${DB_PWD}@localhost:5432/mercure"
+        echo "Using local database: $CONFIG_DATABASE_URL"
+      elif [ "$CONFIG_DB_CHOICE" = "2" ]; then
+        echo ""
+        echo "Enter the PostgreSQL connection string."
+        echo "  Format: postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
+        echo "  Examples:"
+        echo "    postgresql://mercure:yourpassword@localhost:5432/mercure"
+        echo "    postgresql://mercure:secret@192.168.1.10:5432/mercure"
+        echo "    postgresql://mercure:secret@configdb.example.com:5432/mercure"
+        read -p "Connection string: " CONFIG_DATABASE_URL
+        if [ -z "$CONFIG_DATABASE_URL" ]; then
+          echo "Connection string cannot be empty."
+          CONFIG_DB_CHOICE=""
+        fi
+      else
+        echo "Please enter 1 or 2."
+        CONFIG_DB_CHOICE=""
+      fi
+    done
+  fi
+  export USE_SHARED_CONFIG CONFIG_DATABASE_URL
+}
+
 systemd_install () {
   echo "## Performing systemd-type mercure installation..."
+  prompt_shared_config
   create_user
   create_folders
   install_configuration
@@ -450,6 +517,14 @@ systemd_install () {
   install_app_files
   install_dependencies
   install_postgres
+  if [ "${USE_SHARED_CONFIG:-no}" = "yes" ] || [ "${USE_SHARED_CONFIG:-no}" = "shared" ]; then
+    if [ -n "${CONFIG_DATABASE_URL:-}" ]; then
+      echo "## Bootstrapping shared config database..."
+      sudo chown $USER "$CONFIG_PATH"/config_db.env 2>/dev/null || true
+      sudo -u $OWNER bash -c "export MERCURE_CONFIG_DATABASE_URL='$CONFIG_DATABASE_URL' MERCURE_CONFIG_FOLDER='$CONFIG_PATH'; $MERCURE_BASE/env/bin/python $MERCURE_BASE/app/scripts/bootstrap_shared_config.py"
+      sudo chown $OWNER:$OWNER "$CONFIG_PATH"/config_db.env 2>/dev/null || true
+    fi
+  fi
   sudo chown -R mercure:mercure "$MERCURE_BASE"
   install_services
 }

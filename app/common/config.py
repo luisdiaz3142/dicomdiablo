@@ -1,7 +1,8 @@
 """
 config.py
 =========
-mercure's configuration management, used by various mercure modules
+mercure's configuration management, used by various mercure modules.
+Supports standalone mercure.json file or shared PostgreSQL config (see config_backend).
 """
 
 # Standard python includes
@@ -14,6 +15,7 @@ import common.helper as helper
 # App-specific includes
 import common.monitor as monitor
 import common.tagslist as tagslist
+from common.config_backend import get_config_backend
 from common.constants import mercure_names
 from common.log_helpers import get_logger
 from common.types import Config
@@ -28,6 +30,22 @@ if _os_config_file is not None:
     configuration_filename = _os_config_file
 else:
     configuration_filename = (os.getenv("MERCURE_CONFIG_FOLDER") or "/opt/mercure/config") + "/mercure.json"
+
+_config_backend = None
+_notify_listener_started = False
+
+
+def _get_backend():
+    global _config_backend
+    if _config_backend is None:
+        _config_backend = get_config_backend(config_file_path=configuration_filename)
+    return _config_backend
+
+
+def _invalidate_config_timestamp() -> None:
+    """Called when shared config DB sends NOTIFY so next read_config() refetches."""
+    global configuration_timestamp
+    configuration_timestamp = 0
 
 _os_mercure_basepath = os.getenv("MERCURE_BASEPATH")
 if _os_mercure_basepath is None:
@@ -86,131 +104,136 @@ mercure: Config
 
 
 def read_config() -> Config:
-    """Reads the configuration settings (rules, targets, general settings) from the configuration file. The configuration will
-    only be updated if the file has changed compared the the last function call. If the configuration file is locked by
-    another process, an exception will be raised."""
+    """Reads the configuration (from file or shared DB). Only reloads when the stored version is newer than the last load.
+    If using file backend and the file is locked by another process, raises ResourceWarning."""
     global mercure
     global configuration_timestamp
+    global _notify_listener_started
+    backend = _get_backend()
     configuration_file = Path(configuration_filename)
 
-    # Check for existence of lock file
-    lock_file = Path(configuration_file.parent / configuration_file.stem).with_suffix(mercure_names.LOCK)
+    # File backend only: check lock file before read
+    if hasattr(backend, "config_file_path") and backend.config_file_path == configuration_file:
+        lock_file = Path(configuration_file.parent / configuration_file.stem).with_suffix(mercure_names.LOCK)
+        if lock_file.exists():
+            raise ResourceWarning(f"Configuration file locked: {lock_file}")
 
-    if lock_file.exists():
-        raise ResourceWarning(f"Configuration file locked: {lock_file}")
-
-    if not configuration_file.exists():
-        raise FileNotFoundError(f"Configuration file not found: {configuration_file}")
-
-    # Get the modification date/time of the configuration file
-    stat = os.stat(configuration_filename)
     try:
-        timestamp = stat.st_mtime
-    except AttributeError:
-        timestamp = 0
+        loaded_config, version = backend.read()
+    except FileNotFoundError as e:
+        raise FileNotFoundError(str(e))
 
-    # Check if the configuration file is newer than the version
-    # loaded into memory. If not, return
-    if timestamp <= configuration_timestamp:
+    # Skip reload if we already have this version (or newer)
+    if version <= configuration_timestamp and configuration_timestamp > 0:
         return mercure
 
-    logger.info(f"Reading configuration from: {configuration_filename}")
+    logger.info("Reading configuration from: %s", configuration_filename)
 
-    with open(configuration_file, "r") as json_file:
-        loaded_config = json.load(json_file)
-        # Reset configuration to default values (to ensure all needed
-        # keys are present in the configuration)
-        merged: Dict = {**mercure_defaults, **loaded_config}
-        mercure = Config(**merged)
+    merged: Dict = {**mercure_defaults, **loaded_config}
+    mercure = Config(**merged)
 
-        # TODO: Check configuration for errors (esp targets and rules)
+    if not check_folders():
+        raise FileNotFoundError("Configured folders missing")
 
-        # Check if directories exist
-        if not check_folders():
-            raise FileNotFoundError("Configured folders missing")
+    try:
+        read_tagslist()
+    except Exception as e:
+        logger.info(e)
+        logger.info("Unable to parse list of additional tags. Check configuration file.")
 
-        # logger.info("")
-        # logger.info("Active configuration: ")
-        # logger.info(json.dumps(mercure, indent=4))
-        # logger.info("")
+    configuration_timestamp = version
+    monitor.send_event(monitor.m_events.CONFIG_UPDATE, monitor.severity.INFO, "Configuration updated")
 
-        try:
-            read_tagslist()
-        except Exception as e:
-            logger.info(e)
-            logger.info("Unable to parse list of additional tags. Check configuration file.")
+    # Start NOTIFY listener once when using shared DB (so we reload when another server updates config)
+    if backend.supports_notify() and not _notify_listener_started:
+        _notify_listener_started = True
+        backend.start_notify_listener(on_notify=_invalidate_config_timestamp)
 
-        configuration_timestamp = timestamp
-        monitor.send_event(monitor.m_events.CONFIG_UPDATE, monitor.severity.INFO, "Configuration updated")
-        return mercure
+    return mercure
 
 
 def save_config() -> None:
-    """Saves the current configuration in a file on the disk. Raises an exception if the file has
-    been locked by another process."""
+    """Saves the current configuration (to file or shared DB). With file backend, raises if the file is locked."""
     global configuration_timestamp, mercure
+    backend = _get_backend()
     configuration_file = Path(configuration_filename)
 
-    # Check for existence of lock file
-    lock_file = Path(configuration_file.parent / configuration_file.stem).with_suffix(mercure_names.LOCK)
+    # File backend only: use lock file
+    if hasattr(backend, "config_file_path") and backend.config_file_path == configuration_file:
+        lock_file = Path(configuration_file.parent / configuration_file.stem).with_suffix(mercure_names.LOCK)
+        if lock_file.exists():
+            raise ResourceWarning(f"Configuration file locked: {lock_file}")
+        try:
+            lock = helper.FileLock(lock_file)
+        except Exception:
+            raise ResourceWarning(f"Unable to lock configuration file: {lock_file}")
+    else:
+        lock = None
 
-    if lock_file.exists():
-        raise ResourceWarning(f"Configuration file locked: {lock_file}")
+    backend.write(mercure.dict())
 
-    try:
-        lock = helper.FileLock(lock_file)
-    except Exception:
-        raise ResourceWarning(f"Unable to lock configuration file: {lock_file}")
-
-    with open(configuration_file, "w") as json_file:
-        json.dump(mercure.dict(), json_file, indent=4)
-
-    try:
-        stat = os.stat(configuration_file)
-        configuration_timestamp = stat.st_mtime
-    except AttributeError:
-        configuration_timestamp = 0
+    if hasattr(backend, "config_file_path") and backend.config_file_path == configuration_file:
+        try:
+            configuration_timestamp = configuration_file.stat().st_mtime
+        except OSError:
+            configuration_timestamp = 0
+    else:
+        # DB backend: refresh timestamp from backend (next read would do it; set optimistically)
+        try:
+            _, configuration_timestamp = backend.read()
+        except Exception:
+            pass
 
     monitor.send_event(monitor.m_events.CONFIG_UPDATE, monitor.severity.INFO, "Saved new configuration.")
-    logger.info(f"Stored configuration into: {configuration_file}")
+    logger.info("Stored configuration into: %s", configuration_filename)
 
-    try:
-        lock.free()
-    except Exception:
-
-        # Can't delete lock file, so something must be seriously wrong
-        logger.error(f"Unable to remove lock file {lock_file}", None)  # handle_error
-        return
+    if lock is not None:
+        try:
+            lock.free()
+        except Exception:
+            logger.error("Unable to remove lock file %s", lock_file, None)
+            return
 
 
 def write_configfile(json_content) -> None:
-    """Rewrites the config file using the JSON data passed as argument. Used by the config editor of the webgui."""
+    """Rewrites the config using the JSON data passed as argument (file or shared DB). Used by the config editor."""
+    global configuration_timestamp
+    backend = _get_backend()
     configuration_file = Path(configuration_filename)
 
-    # Check for existence of lock file
-    lock_file = Path(configuration_file.parent / configuration_file.stem).with_suffix(mercure_names.LOCK)
+    if hasattr(backend, "config_file_path") and backend.config_file_path == configuration_file:
+        lock_file = Path(configuration_file.parent / configuration_file.stem).with_suffix(mercure_names.LOCK)
+        if lock_file.exists():
+            raise ResourceWarning(f"Configuration file locked: {lock_file}")
+        try:
+            lock = helper.FileLock(lock_file)
+        except Exception:
+            raise ResourceWarning(f"Unable to lock configuration file: {lock_file}")
+    else:
+        lock = None
 
-    if lock_file.exists():
-        raise ResourceWarning(f"Configuration file locked: {lock_file}")
+    backend.write(json_content)
 
-    try:
-        lock = helper.FileLock(lock_file)
-    except Exception:
-        raise ResourceWarning(f"Unable to lock configuration file: {lock_file}")
-
-    with open(configuration_file, "w") as json_file:
-        json.dump(json_content, json_file, indent=4)
+    if hasattr(backend, "config_file_path") and backend.config_file_path == configuration_file:
+        try:
+            configuration_timestamp = configuration_file.stat().st_mtime
+        except OSError:
+            configuration_timestamp = 0
+    else:
+        try:
+            _, configuration_timestamp = backend.read()
+        except Exception:
+            pass
 
     monitor.send_event(monitor.m_events.CONFIG_UPDATE, monitor.severity.INFO, "Wrote configuration file.")
-    logger.info(f"Wrote configuration into: {configuration_file}")
+    logger.info("Wrote configuration into: %s", configuration_filename)
 
-    try:
-        lock.free()
-    except Exception:
-
-        # Can't delete lock file, so something must be seriously wrong
-        logger.error(f"Unable to remove lock file {lock_file}", None)  # handle_error
-        return
+    if lock is not None:
+        try:
+            lock.free()
+        except Exception:
+            logger.error("Unable to remove lock file %s", lock_file, None)
+            return
 
 
 def check_folders() -> bool:

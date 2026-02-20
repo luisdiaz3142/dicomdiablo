@@ -1,6 +1,42 @@
 Advanced Topics
 ===============
 
+Shared Configuration (Multiple Servers)
+---------------------------------------
+
+When running multiple mercure servers (e.g. for high availability or load distribution), you can use a **shared config database** so that all servers use the same rules, targets, and settings. Any server can update the configuration; changes are stored in a single PostgreSQL database and are visible to all servers. Services reload config automatically (via polling and optional PostgreSQL NOTIFY).
+
+**Setup (systemd install):** When you run ``install.sh systemd``, you will be prompted:
+
+1. **Configuration mode:** Choose ``standalone`` (single server, config in ``mercure.json``) or ``shared`` (config in a PostgreSQL database).
+2. If **shared**, choose the database location:
+   - **Local Postgres** – Use the same database that install.sh is already installing. A table ``mercure_config`` is added to the existing ``mercure`` database.
+   - **Another instance** – Connect to an existing Postgres server (e.g. another mercure server’s database).
+
+**Connection string format (for “another instance”):**
+
+::
+
+  postgresql://USER:PASSWORD@HOST:PORT/DATABASE
+
+Examples:
+
+- ``postgresql://mercure:yourpassword@localhost:5432/mercure``
+- ``postgresql://mercure:secret@192.168.1.10:5432/mercure``
+- ``postgresql://mercure:secret@configdb.example.com:5432/mercure``
+
+Use the hostname or IP of the Postgres server, the port (usually 5432), the database name (e.g. ``mercure``), and a user that has permission to create tables and read/write the ``mercure_config`` table.
+
+**How sync and reload work:**
+
+- **Single source of truth:** All servers read and write the same row in ``mercure_config``. There is no multi-master replication; the database is the authority.
+- **Updates from any server:** Changes made on any server (via the web UI or config API) are written to the database. Other servers see the new config on their next poll or immediately if they use the NOTIFY listener.
+- **Reload:** Services (router, dispatcher, cleaner, UI, processor, workers) call ``read_config()`` in their main loop. When the stored config version is newer than the last load, they reload. With the shared DB backend, a background NOTIFY listener is also started so that when one process saves config, other processes on the same machine can reload without waiting for the next scan interval.
+- **Receiver:** The DICOM receiver reads config from the file ``mercure.json``. When using the shared DB backend, that file is kept in sync as a cache whenever any process reads config from the database, so the receiver continues to work without changes.
+
+**Non-interactive install:** Set ``USE_SHARED_CONFIG=shared`` and ``CONFIG_DATABASE_URL=postgresql://...`` before running ``install.sh systemd`` to skip the prompts.
+
+
 Configuration Files
 -------------------
 
