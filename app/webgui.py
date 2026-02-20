@@ -169,15 +169,28 @@ async def shutdown() -> None:
 
 
 async def delete_old_tests() -> Response:
-    tests = await monitor.get_tests()
+    """Remove old self-test rules/targets/modules from config. Swallows config errors so shutdown can complete."""
+    try:
+        tests = await monitor.get_tests()
+    except Exception as e:
+        logger.warning("Shutdown: could not get tests for cleanup: %s", e)
+        return PlainTextResponse("OK")
+
     old_tests = [
         t["id"]
         for t in tests
-        # if t["time_end"] is None
         if datetime.datetime.strptime(t["time_begin"], "%Y-%m-%d %H:%M:%S")
         < datetime.datetime.now() - datetime.timedelta(hours=1)
     ]
-    config.read_config()
+    if not old_tests:
+        return PlainTextResponse("OK")
+
+    try:
+        config.read_config()
+    except Exception as e:
+        logger.warning("Shutdown: skip cleaning old tests (config unavailable): %s", e)
+        return PlainTextResponse("OK")
+
     for i in old_tests:
         if (t := f"{i}_self_test_target") in config.mercure.targets:
             del config.mercure.targets[t]
@@ -188,7 +201,10 @@ async def delete_old_tests() -> Response:
         if (t := f"{i}_self_test_rule_end") in config.mercure.rules:
             del config.mercure.rules[t]
 
-    config.save_config()
+    try:
+        config.save_config()
+    except Exception as e:
+        logger.warning("Shutdown: could not save config after cleaning old tests: %s", e)
 
     return PlainTextResponse("OK")
 

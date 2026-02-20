@@ -7,10 +7,14 @@ Run during installation when using shared (database) configuration mode, or when
 joining an existing cluster (no-op if row already exists).
 
 Usage:
-  Set DATABASE_URL and run from the app directory:
+  From the app directory (loads DATABASE_URL from mercure.env if not set):
     cd /opt/mercure/app && python3 -m tools.seed_config
 
-  Or with env file:
+  Or set DATABASE_URL and run:
+    export DATABASE_URL=postgresql://user:password@host/dbname
+    cd /opt/mercure/app && python3 -m tools.seed_config
+
+  Or source the env file first:
     source /opt/mercure/config/mercure.env && cd /opt/mercure/app && python3 -m tools.seed_config
 """
 import json
@@ -20,10 +24,36 @@ import sys
 # Ensure app is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
+def _load_mercure_env() -> None:
+    """Load DATABASE_URL from mercure.env if not already set (same path as systemd services)."""
+    if os.getenv("DATABASE_URL"):
+        return
+    config_folder = os.getenv("MERCURE_CONFIG_FOLDER") or "/opt/mercure/config"
+    env_path = os.path.join(config_folder, "mercure.env")
+    if not os.path.isfile(env_path):
+        return
+    with open(env_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, _, value = line.partition("=")
+                key = key.strip()
+                # Strip quotes and inline comments
+                value = value.split("#")[0].strip().strip("'\"")
+                if key == "DATABASE_URL" and value:
+                    os.environ["DATABASE_URL"] = value
+                    return
+
+
 def main() -> int:
+    _load_mercure_env()
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         print("ERROR: DATABASE_URL environment variable is not set.", file=sys.stderr)
+        print("  Set it or add DATABASE_URL=... to your mercure.env (e.g. /opt/mercure/config/mercure.env).", file=sys.stderr)
         return 1
 
     default_path = os.path.join(
