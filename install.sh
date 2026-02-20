@@ -148,7 +148,13 @@ install_configuration () {
   # Create mercure.env for config backend (systemd: standalone vs shared)
   if [ "${INSTALL_TYPE:-}" = "systemd" ] && [ ! -f "$CONFIG_PATH"/mercure.env ]; then
     if [ "$CONFIG_MODE" = "2" ]; then
-      SHARED_DB_URL="${SHARED_DB_URL:-postgresql://mercure:$DB_PWD@localhost/mercure}"
+      DEFAULT_DB_URL="postgresql://mercure:$DB_PWD@localhost/mercure"
+      echo ""
+      echo "PostgreSQL instance for shared configuration:"
+      echo "  Enter the connection URL (user:password@host/database)."
+      echo "  Press Enter to use local PostgreSQL: $DEFAULT_DB_URL"
+      read -p "DATABASE_URL [$DEFAULT_DB_URL]: " SHARED_DB_URL
+      SHARED_DB_URL=${SHARED_DB_URL:-$DEFAULT_DB_URL}
       echo "Using shared configuration (PostgreSQL). DATABASE_URL=$SHARED_DB_URL"
       {
         echo "MERCURE_CONFIG_BACKEND=database"
