@@ -48,6 +48,22 @@ def _load_mercure_env() -> None:
                     return
 
 
+def _find_default_config() -> str:
+    """Return path to default config JSON. Tries app layout, repo layout, then config folder."""
+    app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_folder = os.getenv("MERCURE_CONFIG_FOLDER") or "/opt/mercure/config"
+    candidates = [
+        os.path.join(app_dir, "configuration", "default_mercure.json"),
+        os.path.join(app_dir, "..", "configuration", "default_mercure.json"),
+        os.path.join(config_folder, "default_mercure.json"),
+        os.path.join(config_folder, "mercure.json"),
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            return os.path.normpath(path)
+    return candidates[0]  # report first expected path in error
+
+
 def main() -> int:
     _load_mercure_env()
     database_url = os.getenv("DATABASE_URL")
@@ -56,13 +72,11 @@ def main() -> int:
         print("  Set it or add DATABASE_URL=... to your mercure.env (e.g. /opt/mercure/config/mercure.env).", file=sys.stderr)
         return 1
 
-    default_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "configuration",
-        "default_mercure.json",
-    )
+    default_path = _find_default_config()
     if not os.path.isfile(default_path):
         print(f"ERROR: Default config not found: {default_path}", file=sys.stderr)
+        print("  Tried: app/configuration/default_mercure.json, ../configuration/default_mercure.json,", file=sys.stderr)
+        print("  and MERCURE_CONFIG_FOLDER/default_mercure.json or .../mercure.json", file=sys.stderr)
         return 1
 
     with open(default_path, "r") as f:
