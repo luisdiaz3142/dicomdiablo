@@ -180,40 +180,16 @@ class DicomWebTargetHandler(TargetHandler[DicomWebTarget]):
         self, task_id: str, target: DicomWebTarget, dispatch_info: TaskDispatch, source_folder: Path, task: Task
     ) -> str:
         client = self.create_client(target)
-        dcm_files = list(source_folder.glob("**/*.dcm"))
-        total_files = len(dcm_files)
-        batch_size = 500
-        total_stored = 0
-
-        logger.info(f"Sending {total_files} instances in batches of {batch_size} to target")
-
-        for batch_start in range(0, total_files, batch_size):
-            batch_files = dcm_files[batch_start:batch_start + batch_size]
-            datasets = [pydicom.dcmread(str(k)) for k in batch_files]
-            batch_num = (batch_start // batch_size) + 1
-            total_batches = (total_files + batch_size - 1) // batch_size
-            logger.info(f"Sending batch {batch_num}/{total_batches} ({len(datasets)} instances)")
-
-            try:
-                response = client.store_instances(datasets)
-                if len(response.ReferencedSOPSequence) != len(datasets):
-                    raise Exception(
-                        f"Batch {batch_num}: Did not store all datasets "
-                        f"(expected {len(datasets)}, got {len(response.ReferencedSOPSequence)})",
-                        response,
-                    )
-                total_stored += len(datasets)
-            except HTTPError as e:
-                if e.response.status_code == 409:
-                    logger.warning(
-                        f"Batch {batch_num}: Series already exists in the target. "
-                        "Ignore Exception Error for GCP"
-                    )
-                    total_stored += len(datasets)
-                else:
-                    raise
-
-        logger.info(f"Successfully sent {total_stored}/{total_files} instances")
+        datasets = [pydicom.dcmread(str(k)) for k in source_folder.glob("**/*.dcm")]
+        try:
+            response = client.store_instances(datasets)
+            if len(response.ReferencedSOPSequence) != len(datasets):
+                raise Exception("Did not store all datasets", response)
+        except HTTPError as e:
+            if e.response.status_code == 409:
+                logger.warning("Series already exists in the target.  Ignore Exception Error for GCP")
+            else:
+                raise
         return ""
 
     def from_form(self, form: dict, factory, current_target) -> DicomWebTarget:
