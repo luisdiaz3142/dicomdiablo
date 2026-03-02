@@ -52,20 +52,20 @@ def process_image(file, in_folder, out_folder, series_uid, settings):
         # Tags don't exist, so we'll add them and modify the series
         
         # Set the new series UID
-        ds.SeriesInstanceUID = series_uid
+        #ds.SeriesInstanceUID = series_uid
         
         # Set a UID for this slice (every slice needs to have a unique instance UID)
-        ds.SOPInstanceUID = generate_uid()
+        #ds.SOPInstanceUID = generate_uid()
         
         # Add an offset to the series number (to avoid collision in PACS if sending back into the same study)
-        ds.SeriesNumber = ds.SeriesNumber + settings["series_offset"]
+        #ds.SeriesNumber = ds.SeriesNumber + settings["series_offset"]
         
         # Update the series description to indicate this is a modified series
         # ds.SeriesDescription = "MODIFIED(" + ds.SeriesDescription + ")"
         
         # ===== STANDARD TAG MODIFICATION =====
         # Set Institution Name (0008,0080) to "NVRA"
-        ds.InstitutionName = settings["institution_name"]
+        #ds.InstitutionName = settings["institution_name"]
         
         # Set Institutional Department Name (0008,1040) to "NVRA"
         ds.InstitutionalDepartmentName = settings["department_name"]
